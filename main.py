@@ -2,8 +2,19 @@ import noise
 import numpy as np
 from PIL import Image
 import math
+from time import perf_counter
 
 from utils import *
+
+class Timer:
+    def __init__(self):
+        self.last = perf_counter()
+    def __call__(self, string=""):
+        current = perf_counter()
+        print(f"{string}\t{current - self.last}")
+        self.last = current
+
+timer = Timer()
 
 shape = (512,512)
 scale = 0.1
@@ -85,5 +96,7 @@ def add_color(world):
 
 # img = np.floor((world + .5) * 255).astype(np.uint8) # <- Normalize world first
 color_world = add_color(world)
+
+timer("end")
 
 Image.fromarray(color_world).show()
