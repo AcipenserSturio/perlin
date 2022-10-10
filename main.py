@@ -1,27 +1,8 @@
 import noise
 import numpy as np
 from PIL import Image
-import math
-from time import perf_counter
 
-from utils import *
-
-class Timer:
-    def __init__(self):
-        self.last = perf_counter()
-    def __call__(self, string=""):
-        current = perf_counter()
-        print(f"{string}\t{current - self.last}")
-        self.last = current
-
-timer = Timer()
-
-deep_blue = [0, 95, 215]
-blue = [0, 135, 255]
-green = [0, 135, 0]
-beach = [255, 215, 175]
-snow = [255, 255, 255]
-mountain = [138, 138, 138]
+from matplotlib import pyplot as plt
 
 def perlin_noise (
         shape = (512,512),
@@ -33,15 +14,10 @@ def perlin_noise (
     ):
 
     world = np.zeros(shape)
+    world_x, world_y = np.meshgrid(np.linspace(0, 1, shape[0]), np.linspace(0, 1, shape[1]))
 
-    # make coordinate grid on [0,1]^2
-    x_idx = np.linspace(0, 1, shape[0])
-    y_idx = np.linspace(0, 1, shape[1])
-    world_x, world_y = np.meshgrid(x_idx, y_idx)
-
-    # apply perlin noise, instead of np.vectorize, consider using itertools.starmap()
     pnoise = np.vectorize(noise.pnoise2)
-    world = pnoise(world_x/scale,
+    return pnoise(world_x/scale,
                    world_y/scale,
                    octaves=octaves,
                    persistence=persistence,
@@ -49,59 +25,54 @@ def perlin_noise (
                    repeatx=1024,
                    repeaty=1024,
                    base=seed)
-    return world
 
-def add_color(world):
-    color_world = np.zeros(world.shape+(3,), dtype=np.uint8)
+def pythagoras(x1, x2, y1, y2):
+    return np.sqrt(np.abs(x1-x2)**2+np.abs(y1-y2)**2)
+
+def linear(value, x1, x2, y1, y2):
+    return (y1-y2)*(value-x1)/(x1-x2) + y1
+
+def sigmoid(value, bias=0):
+    return np.tanh(np.tan(np.pi*value/2))
+
+def semicircle(value):
+    return np.sqrt(4-(value-1)**2)-1
+
+def add_border(world):
     center_x, center_y = world.shape[1] // 2, world.shape[0] // 2
 
-    for y in range(world.shape[0]):
-        for x in range(world.shape[1]):
+    perlin = linear(world, -.5, .5, -1, 1)
+    xx, yy = np.meshgrid(np.arange(world.shape[1]), np.arange(world.shape[0]))
+    dist = pythagoras(xx, center_x, yy, center_y)
+    dist = linear(dist, min(center_x, center_y), 0, -1, 1)
+    dist = np.maximum(dist, -1)
+    dist = sigmoid(semicircle(semicircle(dist)))
+    dist = linear(dist, -1, 1, 0, 1)
+    perlin = linear(perlin, -1, 1, 0, 1)
+    perlin_in_sphere = linear(dist*perlin, 0, 1, -1, 1)
 
-            perlin = linear(world[x][y], -.5, .5, -1, 1)
+    return perlin_in_sphere
 
-            # distance from centre, measured in pixels
-            dist = pythagoras(x, center_x, y, center_y)
+deep_blue = np.array([0, 95, 215])
+blue = np.array([0, 135, 255])
+green = np.array([0, 135, 0])
+beach = np.array([255, 215, 175])
+snow = np.array([255, 255, 255])
+mountain = np.array([138, 138, 138])
 
-            # edge -> -1, centre -> 1
-            dist = linear(dist, min(center_x, center_y), 0, -1, 1)
+def add_color(world):
+    world = world[..., np.newaxis]
 
-            # never go below -1 (important for corners)
-            dist = max(-1, dist)
+    color_world = (world < -0.2)*deep_blue+\
+                  (world < 0.25)*(world >= -0.2)*blue+\
+                  (world < 0.35)*(world >= 0.25)*beach+\
+                  (world < 0.65)*(world >= 0.35)*green+\
+                  (world < 0.85)*(world >= 0.65)*mountain+\
+                  (world < 1.0)*(world >= 0.85)*snow
+    return color_world.astype(np.uint8)
 
-            # change the distribution to make the circle more consistent
-            dist = sigmoid(semicircle(semicircle(dist)))
-
-            # overlay distance and perlin, using [0, 1] for multiplication
-            dist = linear(dist, -1, 1, 0, 1)
-            perlin = linear(perlin, -1, 1, 0, 1)
-            perlin_in_sphere = linear(dist*perlin, 0, 1, -1, 1)
-
-            # edge -> 0, centre -> 255
-            # perlin_in_sphere = linear(perlin_in_sphere, -1, 1, 0, 255)
-
-            # color_world[x][y] = greyscale(perlin_in_sphere)
-
-            if perlin_in_sphere < -0.2:
-                color_world[x][y] = deep_blue
-            elif perlin_in_sphere < 0.25:
-                color_world[x][y] = blue
-            elif perlin_in_sphere < 0.35:
-                color_world[x][y] = beach
-            elif perlin_in_sphere < 0.65:
-                color_world[x][y] = green
-            elif perlin_in_sphere < 0.85:
-                color_world[x][y] = mountain
-            elif perlin_in_sphere < 1.0:
-                color_world[x][y] = snow
-
-    return color_world
-
-
-# img = np.floor((world + .5) * 255).astype(np.uint8) # <- Normalize world first
-world = perlin_noise()
+generated_noise = perlin_noise()
+world = add_border(generated_noise)
 color_world = add_color(world)
-
-timer("end")
 
 Image.fromarray(color_world).show()
