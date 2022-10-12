@@ -71,8 +71,11 @@ def add_color(world):
                   (world < 1.0)*(world >= 0.85)*snow
     return color_world.astype(np.uint8)
 
-generated_noise = perlin_noise()
+
+seed = 2714
+generated_noise = perlin_noise(seed=seed)
 world = add_border(generated_noise)
 color_world = add_color(world)
 
+Image.fromarray(linear(generated_noise, -1, 1, 1, 255).astype(np.uint8), mode="L").show()
 Image.fromarray(color_world).show()
