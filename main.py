@@ -1,30 +1,31 @@
-import noise
 import numpy as np
 from PIL import Image
 
-from matplotlib import pyplot as plt
+from perlin_numpy import generate_fractal_noise_2d
 
 def perlin_noise (
         shape = (512,512),
-        scale = 0.1,
+        res = (8,8),
         octaves = 5,
         persistence = 0.5,
-        lacunarity = 2.0,
-        seed = np.random.randint(0,100),
+        lacunarity = 2,
+        seed = None,
     ):
+    if seed:
+        np.random.seed(seed)
 
-    world = np.zeros(shape)
-    world_x, world_y = np.meshgrid(np.linspace(0, 1, shape[0]), np.linspace(0, 1, shape[1]))
+    noise = generate_fractal_noise_2d(
+            shape=shape,
+            res=res,
+            octaves=octaves,
+            persistence=persistence,
+            lacunarity=lacunarity,
+        )
 
-    pnoise = np.vectorize(noise.pnoise2)
-    return pnoise(world_x/scale,
-                   world_y/scale,
-                   octaves=octaves,
-                   persistence=persistence,
-                   lacunarity=lacunarity,
-                   repeatx=1024,
-                   repeaty=1024,
-                   base=seed)
+    clamp_noise = (noise < -1)*-1+\
+                  (noise < 1)*(noise >= -1)*noise+\
+                  (noise >= 1)*1
+    return clamp_noise
 
 def pythagoras(x1, x2, y1, y2):
     return np.sqrt(np.abs(x1-x2)**2+np.abs(y1-y2)**2)
@@ -41,7 +42,8 @@ def semicircle(value):
 def add_border(world):
     center_x, center_y = world.shape[1] // 2, world.shape[0] // 2
 
-    perlin = linear(world, -.5, .5, -1, 1)
+    # perlin = linear(world, -.5, .5, -1, 1)
+    perlin = world
     xx, yy = np.meshgrid(np.arange(world.shape[1]), np.arange(world.shape[0]))
     dist = pythagoras(xx, center_x, yy, center_y)
     dist = linear(dist, min(center_x, center_y), 0, -1, 1)
@@ -68,14 +70,13 @@ def add_color(world):
                   (world < 0.35)*(world >= 0.25)*beach+\
                   (world < 0.65)*(world >= 0.35)*green+\
                   (world < 0.85)*(world >= 0.65)*mountain+\
-                  (world < 1.0)*(world >= 0.85)*snow
+                  (world <= 1.0)*(world >= 0.85)*snow
     return color_world.astype(np.uint8)
 
 
-seed = 2714
-generated_noise = perlin_noise(seed=seed)
+generated_noise = perlin_noise()
 world = add_border(generated_noise)
 color_world = add_color(world)
 
-Image.fromarray(linear(generated_noise, -1, 1, 1, 255).astype(np.uint8), mode="L").show()
+Image.fromarray(linear(generated_noise, -1, 1, 0, 255).astype(np.uint8), mode="L").show()
 Image.fromarray(color_world).show()
